@@ -1,7 +1,12 @@
 [package]
 name = "fractional_cascading"
-version = "0.1.0"
+version = "0.2.0"
+authors = ["Innokentiy Popov"]
 edition = "2021"
+readme = "README.md"
+repository = "https://github.com/Great1ng/fractional_cascading"
+license = "MIT License"
+keywords = ["fractional_cascading", "search"]
 
 [dev-dependencies]
 rand = "0.8.5"
