@@ -8,14 +8,17 @@ repository = "https://github.com/Great1ng/fractional_cascading"
 license = "MIT License"
 keywords = ["fractional_cascading", "search"]
 
+[dependencies]
+num-traits = "0.2.17"
+
 [dev-dependencies]
 rand = { version = "0.8.5", features = ["small_rng"] }
 criterion = "0.5.1"
 
+[[test]]
+name = "random_data"
+
 [[bench]]
 name = "search"
 harness = false
-
-[[test]]
-name = "random_data"
 

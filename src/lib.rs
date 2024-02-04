@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use num_traits::Bounded;
 
 #[derive(Clone, Debug)]
 pub struct FCSearcher<T> {
@@ -9,19 +10,13 @@ pub struct FCSearcher<T> {
 // nnxt -> number of items less than value in next
 #[derive(Clone, Copy, Debug)]
 struct Node<T> {
-    val: WithMax<T>,
+    val: T,
     ncur: usize,
     nnxt: usize,
 }
 
-// FIXME: replace this struct with trait
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum WithMax<T> {
-    Val(T),
-    Max,
-}
-
-impl<'val, T: Ord + Clone + 'val> FCSearcher<T> {
+impl<'val, T: Clone + Ord + Bounded + 'val> FCSearcher<T> {
+    // TODO: ?? get rid of DoubleEndedIterator by going backwards in search
     pub fn new<'slc, I, S>(sources: I) -> Self
     where
         'val: 'slc,
@@ -49,58 +44,63 @@ impl<'val, T: Ord + Clone + 'val> FCSearcher<T> {
     }
 
     // TODO: return iterator
+    // TODO: custom first search function
     pub fn search(&self, key: &T) -> Vec<usize> {
-        let mut res = Vec::new();
-
-        let pos = self.cats[0].partition_point(|node| node.val.as_ref() < WithMax::Val(key));
-        let mut node = &self.cats[0][pos];
-        res.push(node.ncur);
-
-        for k in 1..self.cats.len() {
-            if node.nnxt > 0 && self.cats[k][node.nnxt - 1].val.as_ref() >= WithMax::Val(key) {
-                node = &self.cats[k][node.nnxt - 1];
-            } else {
-                node = &self.cats[k][node.nnxt];
-            }
-
+        let mut res = Vec::with_capacity(self.cats.len());
+        
+        if let Some((first_cat, cats)) = self.cats.split_first() {
+            let pos = first_cat.partition_point(|node| node.val < *key);
+            let mut node = &first_cat[pos];
             res.push(node.ncur);
+
+            for cat in cats {
+                if node.nnxt > 0 && cat[node.nnxt - 1].val >= *key {
+                    node = &cat[node.nnxt - 1];
+                } else {
+                    node = &cat[node.nnxt];
+                }
+                res.push(node.ncur);
+            }
         }
 
         res
     }
 }
 
-fn cat_from_src<T: Clone + Eq>(src: &[T]) -> Vec<Node<T>> {
-    let mut res = Vec::new();
-    let mut sprev = 0;
+fn cat_from_src<T: Clone + Eq + Bounded>(src: &[T]) -> Vec<Node<T>> {
+    let mut res = Vec::with_capacity(src.len() + 1);
 
-    for sind in 0..src.len() {
-        if src[sind] != src[sprev] {
-            sprev = sind;
+    // Number of elements less than item 
+    let mut num_less = 0;
+
+    for (index, item) in src.iter().cloned().enumerate() {
+        // Safety: num_less <= index < src.len()
+        if item != *unsafe { src.get_unchecked(num_less) } {
+            num_less = index;
         }
-        res.push(Node::new(WithMax::Val(src[sind].clone()), sprev, 0));
+        res.push(Node::new(item, num_less, 0));
     }
 
-    res.push(Node::new(WithMax::Max, src.len(), 0));
+    res.push(Node::max(src.len(), 0));
     res
 }
 
-fn cat_merged_with_src<T: Clone + Ord>(cat: &[Node<T>], src: &[T]) -> Vec<Node<T>> {
-    let mut res = Vec::new();
+fn cat_merged_with_src<T: Clone + Ord + Bounded>(cat: &[Node<T>], src: &[T]) -> Vec<Node<T>> {
+    let mut res = Vec::with_capacity((cat.len() >> 1) + src.len() + 1);
     let mut sprev = 0;
     let mut cprev = 0;
     let mut sind = 0;
 
     for cind in 0..cat.len() - 1 {
-        while sind < src.len() && WithMax::Val(&src[sind]) < cat[cind].val.as_ref() {
+        while sind < src.len() && src[sind] < cat[cind].val {
             if src[sind] != src[sprev] {
                 sprev = sind;
             }
 
-            if cat[cprev].val.as_ref() == WithMax::Val(&src[sind]) {
-                res.push(Node::new(WithMax::Val(src[sind].clone()), sprev, cprev));
+            if cat[cprev].val == src[sind] {
+                res.push(Node::new(src[sind].clone(), sprev, cprev));
             } else {
-                res.push(Node::new(WithMax::Val(src[sind].clone()), sprev, cind));
+                res.push(Node::new(src[sind].clone(), sprev, cind));
             }
             sind += 1;
         }
@@ -119,63 +119,71 @@ fn cat_merged_with_src<T: Clone + Ord>(cat: &[Node<T>], src: &[T]) -> Vec<Node<T
             sprev = sind;
         }
 
-        if cat[cprev].val.as_ref() == WithMax::Val(&src[sind]) {
-            res.push(Node::new(WithMax::Val(src[sind].clone()), sprev, cprev));
+        if cat[cprev].val == src[sind] {
+            res.push(Node::new(src[sind].clone(), sprev, cprev));
         } else {
-            res.push(Node::new(WithMax::Val(src[sind].clone()), sprev, cat.len()));
+            res.push(Node::new(src[sind].clone(), sprev, cat.len() - 1));
         }
         sind += 1;
     }
 
-    res.push(Node::new(WithMax::Max, sind, cat.len()));
+    res.push(Node::max(sind, cat.len() - 1));
     res
 }
 
 impl<T> Node<T> {
-    fn new(val: WithMax<T>, ncur: usize, nnxt: usize) -> Self {
+    fn new(val: T, ncur: usize, nnxt: usize) -> Self {
         Self { val, ncur, nnxt }
     }
 }
 
-impl<T> WithMax<T> {
-    #[inline]
-    pub fn as_ref(&self) -> WithMax<&T> {
-        match *self {
-            Self::Val(ref x) => WithMax::Val(x),
-            Self::Max => WithMax::Max,
-        }
+impl<T: Bounded> Node<T> {
+    fn max(ncur: usize, nnxt: usize) -> Self {
+        Self { val: T::max_value(), ncur, nnxt }
     }
 }
 
-// TODO: Better unit tests
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    #[test]
+    fn no_catalogs() {
+        let catalogs: Vec<Vec<_>> = Vec::new();
+        let searcher = FCSearcher::new(&catalogs);
+        assert_eq!(searcher.search(&0), &[]);
+    }
+
+    #[test]
+    fn empty_catalogs() { 
+        let catalogs = vec![[], [], []];
+        let searcher = FCSearcher::new(&catalogs);
+        
+        for key in 0..5 {
+            assert_eq!(searcher.search(&key), &[0, 0, 0], "key: {key}");
+        }
+    }
 
     #[test]
     fn single_catalog() {
-        let catalogs = vec![[1, 2, 3, 4, 5]];
+        let catalogs = vec![[1, 3, 5, 7, 8, 9]];
         let searcher = FCSearcher::new(&catalogs);
-        assert_eq!(searcher.search(&3), &[2]);
-        assert_eq!(searcher.search(&6), &[5]);
-        assert_eq!(searcher.search(&0), &[0]);
+        
+        for key in 0..=10 {
+            let ans = catalogs[0].partition_point(|num| num < &key);
+            assert_eq!(searcher.search(&key)[0], ans, "key: {key}");
+        }
     }
 
     #[test]
     fn many_catalogs() {
         let catalogs = vec![vec![1, 3, 6, 10], vec![2, 4, 5, 7, 8, 9]];
         let searcher = FCSearcher::new(&catalogs);
-        assert_eq!(searcher.search(&3), &[1, 1]);
-        assert_eq!(searcher.search(&6), &[2, 3]);
-        assert_eq!(searcher.search(&1), &[0, 0]);
-    }
-
-    #[test]
-    fn equal_elements() {
-        let catalogs = vec![vec![1, 2, 4, 8], vec![0, 2, 4, 6]];
-        let searcher = FCSearcher::new(&catalogs);
-        assert_eq!(searcher.search(&3), &[2, 2]);
-        assert_eq!(searcher.search(&4), &[2, 2]);
-        assert_eq!(searcher.search(&0), &[0, 0]);
+        
+        for key in 0..=11 {
+            let ans1 = catalogs[0].partition_point(|num| num < &key);
+            let ans2 = catalogs[1].partition_point(|num| num < &key);
+            assert_eq!(searcher.search(&key), &[ans1, ans2], "key: {key}, searcher: {searcher:#?}");
+        }
     }
 }

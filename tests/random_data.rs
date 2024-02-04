@@ -37,8 +37,6 @@ fn main() {
     } else {
         for it in 0..N_ITERATIONS {
             let seed = rand::thread_rng().gen();
-            println!("Iteration #{it} seed: {seed}");
-
             let mut rng = SmallRng::seed_from_u64(seed);
             let mut sources = Vec::with_capacity(N_SOURCES);
 
@@ -55,7 +53,8 @@ fn main() {
             for _ in 0..N_KEYS {
                 let key = rng.gen_range(VAL_RANGE);
                 for (ind, pos) in searcher.search(&key).into_iter().enumerate() {
-                    assert!(fit_in_pos(&sources[ind], pos, &key));
+                    assert!(fit_in_pos(&sources[ind], pos, &key), 
+                        "Iteration #{it}, seed: {seed}, key: {key}");
                 }
             }
         }
