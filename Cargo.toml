@@ -1,6 +1,6 @@
 [package]
 name = "fractional_cascading"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Innokentiy Popov"]
 edition = "2021"
 readme = "README.md"
@@ -9,12 +9,8 @@ license = "MIT License"
 keywords = ["fractional_cascading", "search"]
 
 [dev-dependencies]
-rand = "0.8.5"
+rand = { version = "0.8.5", features = ["small_rng"] }
 criterion = "0.5.1"
-
-[[bench]]
-name = "create_searcher"
-harness = false
 
 [[bench]]
 name = "search"

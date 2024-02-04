@@ -1,63 +1,77 @@
-use fractional_cascading::FractionalCascading;
+use std::ops::Range;
 
-use rand::distributions::uniform::SampleRange;
-use rand::rngs::StdRng;
+use fractional_cascading::FCSearcher;
+
+use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+
+const SEED: Option<u64> = None;
+const N_ITERATIONS: usize = 10;
+const N_SOURCES: usize = 100;
+const N_KEYS: usize = 10;
+const MAX_SRC_LEN: usize = 100;
+const VAL_RANGE: Range<i32> = -200..201;
 
 #[test]
 fn main() {
-    for _ in 0..100 {
-        let seed = rand::thread_rng().gen();
+    if let Some(seed) = SEED {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let mut sources = Vec::with_capacity(N_SOURCES);
 
-        let catalogs = random_catalogs(100, 10..1000, seed);
-        let searcher = FractionalCascading::new(&catalogs);
-
-        for key in -200..200 {
-            let debug_log = format!("\nTesting seed: {seed}\nSearching key: {key}");
-            let s: Vec<_> = searcher
-                .search(&key)
-                .iter()
-                .enumerate()
-                .map(|(i, x)| x.map(|y| catalogs[i][y]))
-                .collect();
-            assert_eq!(s, find_with_binary_search(&catalogs, &key), "{debug_log}");
+        for _ in 0..N_SOURCES {
+            let len = rng.gen_range(0..=MAX_SRC_LEN);
+            let mut src = vec![0; len];
+            rng.fill(src.as_mut_slice());
+            src.sort();
+            sources.push(src);
         }
-    }
-}
 
-fn random_catalogs<R>(count: usize, size_range: R, seed: u64) -> Vec<Vec<i32>>
-where
-    R: SampleRange<usize> + Clone,
-{
-    let mut rng = StdRng::seed_from_u64(seed);
+        let searcher = FCSearcher::new(&sources);
 
-    let mut catalogs = Vec::with_capacity(count);
-    for _ in 0..count {
-        let catalog_size = rng.gen_range(size_range.clone());
-        let mut catalog = Vec::with_capacity(catalog_size);
-
-        for _ in 0..catalog_size {
-            catalog.push(rng.gen_range(-100..100));
+        for _ in 0..N_KEYS {
+            let key = rng.gen_range(VAL_RANGE);
+            for (ind, pos) in searcher.search(&key).into_iter().enumerate() {
+                assert!(fit_in_pos(&sources[ind], pos, &key));
+            }
         }
-        catalog.sort();
-        catalogs.push(catalog);
-    }
+    } else {
+        for it in 0..N_ITERATIONS {
+            let seed = rand::thread_rng().gen();
+            println!("Iteration #{it} seed: {seed}");
 
-    catalogs
-}
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let mut sources = Vec::with_capacity(N_SOURCES);
 
-fn find_with_binary_search<T: Ord + Copy>(catalogs: &[Vec<T>], key: &T) -> Vec<Option<T>> {
-    catalogs
-        .iter()
-        .map(|catalog| match catalog.binary_search(key) {
-            Ok(index) => Some(catalog[index]),
-            Err(index) => {
-                if index == 0 {
-                    None
-                } else {
-                    Some(catalog[index - 1])
+            for _ in 0..N_SOURCES {
+                let len = rng.gen_range(0..=MAX_SRC_LEN);
+                let mut src = vec![0; len];
+                rng.fill(src.as_mut_slice());
+                src.sort();
+                sources.push(src);
+            }
+
+            let searcher = FCSearcher::new(&sources);
+
+            for _ in 0..N_KEYS {
+                let key = rng.gen_range(VAL_RANGE);
+                for (ind, pos) in searcher.search(&key).into_iter().enumerate() {
+                    assert!(fit_in_pos(&sources[ind], pos, &key));
                 }
             }
-        })
-        .collect()
+        }
+    }
+}
+
+fn fit_in_pos<T: Ord>(src: &[T], pos: usize, key: &T) -> bool {
+    let mut res = true;
+
+    if pos < src.len() {
+        res = src[pos] >= *key;
+    }
+
+    if res && pos > 0 {
+        res = src[pos - 1] < *key;
+    }
+
+    res
 }
