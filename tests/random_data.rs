@@ -53,8 +53,10 @@ fn main() {
             for _ in 0..N_KEYS {
                 let key = rng.gen_range(VAL_RANGE);
                 for (ind, pos) in searcher.search(&key).into_iter().enumerate() {
-                    assert!(fit_in_pos(&sources[ind], pos, &key), 
-                        "Iteration #{it}, seed: {seed}, key: {key}");
+                    assert!(
+                        fit_in_pos(&sources[ind], pos, &key),
+                        "Iteration #{it}, seed: {seed}, key: {key}"
+                    );
                 }
             }
         }

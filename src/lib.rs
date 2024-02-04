@@ -1,5 +1,5 @@
-use std::borrow::Borrow;
 use num_traits::Bounded;
+use std::borrow::Borrow;
 
 #[derive(Clone, Debug)]
 pub struct FCSearcher<T> {
@@ -47,7 +47,7 @@ impl<'val, T: Clone + Ord + Bounded + 'val> FCSearcher<T> {
     // TODO: custom first search function
     pub fn search(&self, key: &T) -> Vec<usize> {
         let mut res = Vec::with_capacity(self.cats.len());
-        
+
         if let Some((first_cat, cats)) = self.cats.split_first() {
             let pos = first_cat.partition_point(|node| node.val < *key);
             let mut node = &first_cat[pos];
@@ -70,7 +70,7 @@ impl<'val, T: Clone + Ord + Bounded + 'val> FCSearcher<T> {
 fn cat_from_src<T: Clone + Eq + Bounded>(src: &[T]) -> Vec<Node<T>> {
     let mut res = Vec::with_capacity(src.len() + 1);
 
-    // Number of elements less than item 
+    // Number of elements less than item
     let mut num_less = 0;
 
     for (index, item) in src.iter().cloned().enumerate() {
@@ -139,14 +139,18 @@ impl<T> Node<T> {
 
 impl<T: Bounded> Node<T> {
     fn max(ncur: usize, nnxt: usize) -> Self {
-        Self { val: T::max_value(), ncur, nnxt }
+        Self {
+            val: T::max_value(),
+            ncur,
+            nnxt,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn no_catalogs() {
         let catalogs: Vec<Vec<_>> = Vec::new();
@@ -155,10 +159,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_catalogs() { 
+    fn empty_catalogs() {
         let catalogs = vec![[], [], []];
         let searcher = FCSearcher::new(&catalogs);
-        
+
         for key in 0..5 {
             assert_eq!(searcher.search(&key), &[0, 0, 0], "key: {key}");
         }
@@ -168,7 +172,7 @@ mod tests {
     fn single_catalog() {
         let catalogs = vec![[1, 3, 5, 7, 8, 9]];
         let searcher = FCSearcher::new(&catalogs);
-        
+
         for key in 0..=10 {
             let ans = catalogs[0].partition_point(|num| num < &key);
             assert_eq!(searcher.search(&key)[0], ans, "key: {key}");
@@ -179,11 +183,15 @@ mod tests {
     fn many_catalogs() {
         let catalogs = vec![vec![1, 3, 6, 10], vec![2, 4, 5, 7, 8, 9]];
         let searcher = FCSearcher::new(&catalogs);
-        
+
         for key in 0..=11 {
             let ans1 = catalogs[0].partition_point(|num| num < &key);
             let ans2 = catalogs[1].partition_point(|num| num < &key);
-            assert_eq!(searcher.search(&key), &[ans1, ans2], "key: {key}, searcher: {searcher:#?}");
+            assert_eq!(
+                searcher.search(&key),
+                &[ans1, ans2],
+                "key: {key}, searcher: {searcher:#?}"
+            );
         }
     }
 }
