@@ -16,19 +16,17 @@ struct Node<T> {
 }
 
 impl<'val, T: Clone + Ord + Bounded + 'val> FCSearcher<T> {
-    // TODO: ?? get rid of DoubleEndedIterator by going backwards in search
     pub fn new<'slc, I, S>(sources: I) -> Self
     where
         'val: 'slc,
         S: Borrow<[T]> + 'slc,
         I: IntoIterator<Item = &'slc S>,
-        <I as IntoIterator>::IntoIter: DoubleEndedIterator,
     {
         let mut cats = Vec::new();
-        let mut srcs = sources.into_iter().rev();
+        let mut srcs = sources.into_iter();
 
-        if let Some(last_src) = srcs.next() {
-            let mut last_cat = cat_from_src(last_src.borrow());
+        if let Some(first_src) = srcs.next() {
+            let mut last_cat = cat_from_src(first_src.borrow());
 
             for src in srcs {
                 let new_last_cat = cat_merged_with_src(&last_cat, src.borrow());
@@ -50,19 +48,24 @@ impl<'val, T: Clone + Ord + Bounded + 'val> FCSearcher<T> {
 
         if let Some((first_cat, cats)) = self.cats.split_first() {
             let pos = first_cat.partition_point(|node| node.val < *key);
-            let mut node = &first_cat[pos];
+
+            // Safety: pos <= first_cat.len()
+            let mut node = unsafe { first_cat.get_unchecked(pos) };
             res.push(node.ncur);
 
             for cat in cats {
-                if node.nnxt > 0 && cat[node.nnxt - 1].val >= *key {
-                    node = &cat[node.nnxt - 1];
+                // Safety: 0 <= node.nnxt - 1 < node.nnxt < cat.len() 
+                if node.nnxt > 0 && unsafe {cat.get_unchecked(node.nnxt - 1)}.val >= *key {
+                    node = unsafe { cat.get_unchecked(node.nnxt - 1) };
                 } else {
-                    node = &cat[node.nnxt];
+                    // Safety: node.nnxt <= cat.len()
+                    node = unsafe { cat.get_unchecked(node.nnxt) };
                 }
                 res.push(node.ncur);
             }
         }
 
+        res.reverse();
         res
     }
 }
